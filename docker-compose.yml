@@ -1,0 +1,55 @@
+services:
+  static-assets:
+    image: nginxinc/nginx-unprivileged:1.25.4-alpine
+    container_name: restore-transcripts
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    environment:
+      - NGINX_ENTRYPOINT_LOCAL_RESOLVERS=0
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 64M
+        reservations:
+          cpus: '0.01'
+          memory: 16M
+
+    volumes:
+      - ./public:/usr/share/nginx/html:ro
+
+    networks:
+      - app_network
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/restore-transcripts.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${DOCKER_NETWORK}"
+      - "traefik.http.routers.restore-transcripts-rt.rule=Host(`${SERVICE_DOMAIN}`)"
+      - "traefik.http.routers.restore-transcripts-rt.entrypoints=websecure"
+      - "traefik.http.routers.restore-transcripts-rt.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.restore-transcripts-rt.service=restore-transcripts-svc"
+      - "traefik.http.services.restore-transcripts-svc.loadbalancer.server.port=8080"
+      - "traefik.http.routers.restore-transcripts-rt.middlewares=restore-transcripts-cors"
+      - "traefik.http.middlewares.restore-transcripts-cors.headers.accesscontrolallowmethods=GET,OPTIONS"
+      - "traefik.http.middlewares.restore-transcripts-cors.headers.accesscontrolalloworiginlist=${ALLOWED_ORIGIN}"
+
+networks:
+  app_network:
+    external: true
+    name: ${DOCKER_NETWORK}
